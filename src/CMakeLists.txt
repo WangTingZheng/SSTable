@@ -9,7 +9,9 @@ set(SOURCE_FILES
         block.h
         ../util/coding.h
         ../util/coding.cc
+        ../util/status.cc
         ../include/slice.h
+
 )
 
 add_executable(src ${SOURCE_FILES})

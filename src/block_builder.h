@@ -1,24 +1,33 @@
-//
-// Created by 14037 on 2022/4/16.
-//
+#ifndef CMAKE_PROJECT_TEMPLATE_BLOCK_BUILDER_H
+#define CMAKE_PROJECT_TEMPLATE_BLOCK_BUILDER_H
 
-#ifndef SSTABLE_BLOCK_BUILDER_H
-#define SSTABLE_BLOCK_BUILDER_H
-
-#include "../include/slice.h"
+#include <vector>
+#include "slice.h"
 #include "../util/coding.h"
 
-namespace leveldb{
+
+namespace leveldb {
     class BlockBuilder {
-        public:
-            void Add(const Slice &key, const Slice &value);
-            Slice Finish();
+    public:
+        explicit BlockBuilder();
 
-        private:
-            std::string buffer_;
+        void Add(const Slice &key, const Slice &value);
+
+        Slice Finish();
+
+    private:
+        std::string buffer_;
+        std::string last_key_;
+
+        int counter_;
     };
-
 }
 
 
-#endif //SSTABLE_BLOCK_BUILDER_H
+#endif //CMAKE_PROJECT_TEMPLATE_BLOCK_BUILDER_H
+
+
+
+
+
+
