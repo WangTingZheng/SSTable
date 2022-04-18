@@ -10,8 +10,12 @@ set(SOURCE_FILES
         ../util/coding.h
         ../util/coding.cc
         ../util/status.cc
+        ../util/options.cc
+        ../util/comparator.cc
         ../include/slice.h
-
-)
+        ../include/comparator.h
+        ../include/env.h
+        ../include/options.h
+        )
 
 add_executable(src ${SOURCE_FILES})

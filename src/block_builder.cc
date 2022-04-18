@@ -2,14 +2,18 @@
 
 namespace leveldb {
 
-    void leveldb::BlockBuilder::Add(const Slice &key, const Slice &value) {
+    void BlockBuilder::Add(const Slice &key, const Slice &value) {
         Slice last_key_piece(last_key_);
+
+        assert(counter_ < options_->block_restart_interval);
+        assert(buffer_.empty() ||
+                       options_->comparator->Compare(key, last_key_piece) < 0);
 
         //初始化共享长度，第一个Entry为0，因为保存的是完整的key
         size_t shared = 0;
 
         // 如果不是第一个Entry，就需要特别计算共享长度
-        if (counter_ > 0){
+        if (counter_ < options_->block_restart_interval){
             // 从左向右遍历的长度，取两个key的最小值即可，因为我们要比较同一位置的字符，比较的前提是两个key都要有这个字符
             const size_t min_length = std::min(last_key_piece.size(), key.size());
 
@@ -17,6 +21,9 @@ namespace leveldb {
             while ((shared < min_length) && (last_key_piece[shared] == key[shared])){
                 shared++; //同一位置字符相同，共享长度加一
             }
+        }else{
+            restarts_.push_back(buffer_.size());
+            counter_ = 0;
         }
 
         // 非共享长度等于总长度减去共享长度
@@ -43,12 +50,18 @@ namespace leveldb {
         counter_ ++;
     }
 
-    Slice leveldb::BlockBuilder::Finish() {
+    Slice BlockBuilder::Finish() {
+        for(int i = 0; i < restarts_.size(); i++){
+            // 因为要进行二分查找，所以使用固定大小的空间来存储restart point
+            PutFixed32(&buffer_, restarts_[i]);
+        }
+
+        PutFixed32(&buffer_, restarts_.size());
         return Slice(buffer_);
     }
 
-    BlockBuilder::BlockBuilder()
-            :counter_(0){
-
+    BlockBuilder::BlockBuilder(const Options* options)
+            :options_(options), restarts_(), counter_(0){
+        restarts_.push_back(0);
     }
 }

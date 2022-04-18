@@ -3,6 +3,8 @@
 
 #include <status.h>
 #include "slice.h"
+#include "../include/comparator.h"
+#include "../include/iterator.h"
 
 namespace leveldb{
     class Block{
@@ -11,31 +13,15 @@ namespace leveldb{
         // 禁止Block block = "contents";这种调用方法
         // 只能Block block = Block::Block("contents");
         explicit Block(Slice contents);
-
-        // 从一个Block中解析出一对KV对到key_和value_
-        bool ParseNextKey();
-
-        // 读取
-        Slice key();
-
-        Slice value();
-
-        Status status();
-
+        Iterator *NewIterator(const Comparator*comparator);
     private:
+        class Iter;
         const char * data_;
         size_t size_;
 
-        uint32_t current_;
+        uint32_t restarts_offset_;
 
-        std::string key_;
-        Slice value_;
-
-        Status status_;
-
-        bool Vaild() const;
-
-        void CorruptionError();
+        uint32_t NumRestarts() const;
     };
 }
 
