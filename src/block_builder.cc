@@ -5,9 +5,11 @@ namespace leveldb {
     void BlockBuilder::Add(const Slice &key, const Slice &value) {
         Slice last_key_piece(last_key_);
 
+        assert(!finished_);
+
         assert(counter_ < options_->block_restart_interval);
         assert(buffer_.empty() ||
-                       options_->comparator->Compare(key, last_key_piece) < 0);
+                       options_->comparator->Compare(key, last_key_piece) > 0);
 
         //初始化共享长度，第一个Entry为0，因为保存的是完整的key
         size_t shared = 0;
@@ -57,11 +59,12 @@ namespace leveldb {
         }
 
         PutFixed32(&buffer_, restarts_.size());
+        finished_ = true;
         return Slice(buffer_);
     }
 
     BlockBuilder::BlockBuilder(const Options* options)
-            :options_(options), restarts_(), counter_(0){
+            :options_(options), restarts_(), counter_(0), finished_(false){
         restarts_.push_back(0);
     }
 }

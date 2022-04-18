@@ -23,6 +23,8 @@ namespace leveldb {
         std::vector<uint32_t> restarts_;
         std::string last_key_;
 
+        bool finished_;
+
         int counter_;
     };
 }

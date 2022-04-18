@@ -7,15 +7,21 @@ set(SOURCE_FILES
         block_builder.cc
         block.cc
         block.h
+        iterator.cc
         ../util/coding.h
         ../util/coding.cc
         ../util/status.cc
         ../util/options.cc
+        ../include/options.h
         ../util/comparator.cc
         ../include/slice.h
         ../include/comparator.h
         ../include/env.h
         ../include/options.h
+        ../include/iterator.h
+        ../util/env_posix.cc
+
+        ../util/env.cc
         )
 
 add_executable(src ${SOURCE_FILES})

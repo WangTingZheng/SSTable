@@ -2,25 +2,56 @@
 #include "block.h"
 
 void test_block(){
-    leveldb::BlockBuilder builder;
+    leveldb::Options options = leveldb::Options();
+    leveldb::BlockBuilder builder = leveldb::BlockBuilder(&options);
 
     builder.Add("key1", "val1");
     builder.Add("key2", "val2");
     builder.Add("key3", "val3");
     builder.Add("key4", "val4");
+    builder.Add("key5", "val5");
+    builder.Add("key6", "val6");
+    builder.Add("key7", "val7");
+    builder.Add("key8", "val8");
+    builder.Add("key9", "val9");
+
+    builder.Add("key91", "val91");
+    builder.Add("key92", "val92");
+    builder.Add("key93", "val93");
+    builder.Add("key94", "val94");
+    builder.Add("key95", "val95");
+    builder.Add("key96", "val96");
+    builder.Add("key97", "val97");
 
     leveldb::Block block = leveldb::Block(builder.Finish());
+    leveldb::Iterator *iterator = block.NewIterator(options.comparator);
 
-    while (block.ParseNextKey() && block.status().ok()){
-        printf("key is [%s], value is [%s]\n", block.key().ToString().c_str(), block.value().ToString().c_str());
-    }
+    printf("[Seek to key96]: ");
+    iterator->Seek("key96");
+    assert(iterator->value() == leveldb::Slice("val96"));
+    printf("Passed\n");
 
-    if(!block.status().ok()){
-        printf("%s\n", block.status().ToString().c_str());
-    }
+    printf("[Move to prev Entry]: ");
+    iterator->Prev();
+    assert(iterator->value() == leveldb::Slice("val95"));
+    printf("Passed\n");
 
-    // 测试Vaild()，最后一次while循环会执行的ParseNextKey会使得p >= limit成立，current_被设置为了size_ + 1，此时已经失效了
-    block.key();
+    printf("[Go to next and next Entry]: ");
+    iterator->Next();
+    iterator->Next();
+    assert(iterator->value() == leveldb::Slice("val97"));
+    printf("Passed\n");
+
+    printf("[Seek to first]: ");
+    iterator->SeekToFirst();
+    assert(iterator->value() == leveldb::Slice("val1"));
+    printf("Passed\n");
+
+    printf("[Seek to last]: ");
+    iterator->SeekToLast();
+    assert(iterator->value() == leveldb::Slice("val97"));
+    printf("Passed\n");
+
 }
 
 int main(int argc, const char *argv[]) {
@@ -29,11 +60,9 @@ int main(int argc, const char *argv[]) {
 }
 
 /*
- * 运行结果：
-    assertion "Vaild()" failed: file "/cygdrive/b/Project/Clion/SSTable/src/block.cc", line 58, function: leveldb::Slice leveldb::Block::key()
-    key is [key1], value is [val1]
-    key is [key2], value is [val2]
-    key is [key3], value is [val3]
-    key is [key4], value is [val4]
- * 第一个报错是因为while循环的最后一次ParseNextKey把current_设置成了size_，是无效的一次读取，所以无法读取到key_了
+[Seek to key96]: Passed
+[Move to prev Entry]: Passed
+[Go to next and next Entry]: Passed
+[Seek to first]: Passed
+[Seek to last]: Passed
  */
