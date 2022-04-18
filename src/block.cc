@@ -154,6 +154,32 @@ namespace leveldb {
             uint32_t left = 0;
             uint32_t right = num_restarts_ - 1;
 
+            int current_key_compare = 0;
+
+            if(Valid()){
+                current_key_compare = Compare(key_, target);
+
+                // 注意，和二分查找不同的是，key_代表的Entry不一定在一组的第一个
+                if(current_key_compare < 0){
+                    // key_ < target
+                    // key 属于[left, restart_index_ - 1]都 < target，且不是最后一个
+                    // 舍弃[left, restart_index_ - 1]，缩小到[restart_index_, right]
+                    left = restart_index_;
+                } else if(current_key_compare > 0){
+                    // key_ > target
+                    // target < key_
+                    // key_ 属于[restart_index_ + 1, right] 都 > target，不满足key < target
+                    // [header,...,target,...key_,...]，target还是有可能在本组内的
+                    // 舍弃[restart_index_ + 1, right]，缩小到[left, restart_index_]
+                    right = restart_index_;
+                } else{
+                    // key_ = target
+                    // 我们上一次找到的Entry，restart_index_以及current_所指向的Entry，就是本次要找的Entry
+                    // 直接返回
+                    return;
+                }
+            }
+
             while (left < right){
                 // 取中点，这里把mid可能会泄露
                 // 故可以写成uint32_t mid = left + ((right - left) / 2);
@@ -190,8 +216,14 @@ namespace leveldb {
                 }
             }
 
+            // key_ < target [header,...,key_,...target...]
+            // 同一组，且上一次ParseNextKey的key在这一次的前面，就可以直接ParseNextKey得到
+            // key_ > target时，即使在同一组，target也在key_前面，无法ParseNextKey到
+            bool skip_seek = left == restart_index_ && current_key_compare < 0;
             // 移动磁头对准找到的组的第一个Entry
-            SeekToRestartPoint(left);
+            if(!skip_seek) {
+                SeekToRestartPoint(left);
+            }
 
             while (true){
                 // 一直顺序遍历
