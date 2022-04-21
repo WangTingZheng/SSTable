@@ -48,8 +48,10 @@ namespace leveldb {
 
     // 初始化Block的三个地址：data_、restart offset、size_
     // 错误处理，检查restart point length是否合法
-    Block::Block(Slice contents) // restart point的数量
-            : data_(contents.data()), size_(contents.size()) {
+    Block::Block(BlockContents contents) // restart point的数量
+            : data_(contents.data.data()),
+            size_(contents.data.size()),
+            owned(contents.heap_allocated){
 
         // 防止size_ - sizeof(uint32_t)溢出
         // 同时防止NumRestarts()读取到Block前面的数据造成读取restart point出错
@@ -378,6 +380,12 @@ namespace leveldb {
             return NewEmptyIterator();
         }else { // 如果不为零，则说明Block正常，生成迭代器
             return new Iter(comparator, data_, num_restarts_, restarts_offset_);
+        }
+    }
+
+    Block::~Block() {
+        if(owned){
+            delete[] data_;
         }
     }
 }

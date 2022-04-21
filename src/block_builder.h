@@ -15,6 +15,10 @@ namespace leveldb {
 
         void Add(const Slice &key, const Slice &value);
 
+        size_t CurrentSizeEstimate() const;
+
+        void Reset();
+
         Slice Finish();
 
     private:

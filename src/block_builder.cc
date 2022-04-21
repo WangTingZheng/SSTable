@@ -67,4 +67,22 @@ namespace leveldb {
             :options_(options), restarts_(), counter_(0), finished_(false){
         restarts_.push_back(0);
     }
+
+    size_t BlockBuilder::CurrentSizeEstimate() const {
+        return buffer_.size() +
+                restarts_.size() * sizeof (uint32_t) +
+                sizeof(uint32_t);
+    }
+
+    void BlockBuilder::Reset() {
+        buffer_.clear();
+
+        restarts_.clear();
+        restarts_.push_back(0);
+
+        counter_ = 0;
+        finished_ = false;
+
+        last_key_.clear();
+    }
 }
