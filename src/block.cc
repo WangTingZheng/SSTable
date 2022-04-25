@@ -11,9 +11,9 @@ namespace leveldb {
         if (limit - p < 3) return nullptr;
 
         // 在小长度的情况下，避免跳入函数，减少栈空间创建
-        *shared       = reinterpret_cast<const uint8_t *>(p)[0];
+        *shared = reinterpret_cast<const uint8_t *>(p)[0];
         // 添加非共享的key的长度
-        *non_shared   = reinterpret_cast<const uint8_t *>(p)[1];
+        *non_shared = reinterpret_cast<const uint8_t *>(p)[1];
         *value_length = reinterpret_cast<const uint8_t *>(p)[2];
 
         // 如果三种长度都是只占一个比特
@@ -35,7 +35,7 @@ namespace leveldb {
 
     // 读取Block最后的restart point length，获得保存的restart point个数
     // 获取restart point length的头地址
-    inline uint32_t Block::NumRestarts() const{
+    inline uint32_t Block::NumRestarts() const {
         // data_ + size_ Block尾地址
         return DecodeFixed32(data_ + size_ - sizeof(uint32_t));
     }
@@ -50,66 +50,66 @@ namespace leveldb {
     // 错误处理，检查restart point length是否合法
     Block::Block(BlockContents contents) // restart point的数量
             : data_(contents.data.data()),
-            size_(contents.data.size()),
-            owned(contents.heap_allocated){
+              size_(contents.data.size()),
+              owned(contents.heap_allocated) {
 
         // 防止size_ - sizeof(uint32_t)溢出
         // 同时防止NumRestarts()读取到Block前面的数据造成读取restart point出错
-        if(size_ < sizeof(uint32_t)){
+        if (size_ < sizeof(uint32_t)) {
             size_ = 0;
-        }else{
+        } else {
             // 由于size_是size_t类型的，是非负数，如果size_ < sizeof(uint32_t)，那么size_ - sizeof(uint32_t) < 0会溢出
             size_t max_restarts_allowed = (size_ - sizeof(uint32_t)) / sizeof(uint32_t);
             // 如果实际存储的restart point比最大的restart point还多的话，说明Block保存的restart point length不合法
-            if(NumRestarts() > max_restarts_allowed){
+            if (NumRestarts() > max_restarts_allowed) {
                 size_ = 0;
-            }else{
+            } else {
                 // restart point的头偏移量是总的偏移量减去restart point length和restart point所占的长度
                 restarts_offset_ = size_ - (1 + NumRestarts()) * sizeof(uint32_t);
             }
         }
     }
 
-    class Block::Iter : public Iterator{
-        private:
-                // 要进行二分查找，一定要对比两个key的大小
-                const Comparator* comparator_;
+    class Block::Iter : public Iterator {
+    private:
+        // 要进行二分查找，一定要对比两个key的大小
+        const Comparator *comparator_;
 
-                // Block的静态属性
-                // 除了data_是地址，别的都是偏移量
-                const char  *data_; // Block的头地址
-                uint32_t const restarts_; // restart point的头偏移量
-                uint32_t const num_restarts_; // restart point的个数，用于二分查找范围
+        // Block的静态属性
+        // 除了data_是地址，别的都是偏移量
+        const char *data_; // Block的头地址
+        uint32_t const restarts_; // restart point的头偏移量
+        uint32_t const num_restarts_; // restart point的个数，用于二分查找范围
 
-                // Block的动态属性
-                uint32_t restart_index_; //组磁头：指向Block中某一组磁头
-                uint32_t current_; //Entry磁头：指向一组中某一Entry的磁头
+        // Block的动态属性
+        uint32_t restart_index_; //组磁头：指向Block中某一组磁头
+        uint32_t current_; //Entry磁头：指向一组中某一Entry的磁头
 
-                // 临时变量
-                std::string key_; // 读取到的key，需要用resize操作舍弃非共享部分，以减少数据拷贝
-                Slice value_; // 读取到的value
+        // 临时变量
+        std::string key_; // 读取到的key，需要用resize操作舍弃非共享部分，以减少数据拷贝
+        Slice value_; // 读取到的value
 
-                // 操作之后的状态
-                Status status_;
+        // 操作之后的状态
+        Status status_;
 
         // 封装二分查找要用的Compare
-        inline int Compare(const Slice &a, const Slice &b) const{
+        inline int Compare(const Slice &a, const Slice &b) const {
             return comparator_->Compare(a, b);
         }
 
         // 获得组磁头的地址
-        uint32_t GetRestartPoint(uint32_t index){
+        uint32_t GetRestartPoint(uint32_t index) {
             assert(index < num_restarts_);
             return DecodeFixed32(data_ + restarts_ + index * sizeof(uint32_t));
         }
 
         // 获得下一个Entry的头偏移量
-        inline uint32_t NextEntryOffset() const{
+        inline uint32_t NextEntryOffset() const {
             return (value_.data() + value_.size()) - data_;
         }
 
         // 移动组磁头和Entry磁头指向index组的第一个Entry
-        void SeekToRestartPoint(uint32_t index){
+        void SeekToRestartPoint(uint32_t index) {
             key_.clear();
             restart_index_ = index;
 
@@ -124,26 +124,26 @@ namespace leveldb {
             value_ = Slice(data_ + offset, 0);
         }
 
-        public:
-            Iter(const Comparator * comparator,
-                 const char *data,
-                 uint32_t num_restarts,
-                 uint32_t restarts)
-                    // 二分查找用的Compare
-                    : comparator_(comparator),
+    public:
+        Iter(const Comparator *comparator,
+             const char *data,
+             uint32_t num_restarts,
+             uint32_t restarts)
+        // 二分查找用的Compare
+                : comparator_(comparator),
 
-                    // Block的静态属性
-                    data_(data),
-                    restarts_(restarts),
-                    num_restarts_(num_restarts),
+                // Block的静态属性
+                  data_(data),
+                  restarts_(restarts),
+                  num_restarts_(num_restarts),
 
-                    // Block的动态属性
-                    // 磁头最开始指向Entry区的尾偏移量
-                    restart_index_(num_restarts_),
-                    current_(restarts){
+                // Block的动态属性
+                // 磁头最开始指向Entry区的尾偏移量
+                  restart_index_(num_restarts_),
+                  current_(restarts) {
 
-                assert(num_restarts > 0);
-            }
+            assert(num_restarts > 0);
+        }
 
         // 侦测到无效时，会使得磁头指向restarts_
         bool Valid() const override {
@@ -158,23 +158,23 @@ namespace leveldb {
 
             int current_key_compare = 0;
 
-            if(Valid()){
+            if (Valid()) {
                 current_key_compare = Compare(key_, target);
 
                 // 注意，和二分查找不同的是，key_代表的Entry不一定在一组的第一个
-                if(current_key_compare < 0){
+                if (current_key_compare < 0) {
                     // key_ < target
                     // key 属于[left, restart_index_ - 1]都 < target，且不是最后一个
                     // 舍弃[left, restart_index_ - 1]，缩小到[restart_index_, right]
                     left = restart_index_;
-                } else if(current_key_compare > 0){
+                } else if (current_key_compare > 0) {
                     // key_ > target
                     // target < key_
                     // key_ 属于[restart_index_ + 1, right] 都 > target，不满足key < target
                     // [header,...,target,...key_,...]，target还是有可能在本组内的
                     // 舍弃[restart_index_ + 1, right]，缩小到[left, restart_index_]
                     right = restart_index_;
-                } else{
+                } else {
                     // key_ = target
                     // 我们上一次找到的Entry，restart_index_以及current_所指向的Entry，就是本次要找的Entry
                     // 直接返回
@@ -182,7 +182,7 @@ namespace leveldb {
                 }
             }
 
-            while (left < right){
+            while (left < right) {
                 // 取中点，这里把mid可能会泄露
                 // 故可以写成uint32_t mid = left + ((right - left) / 2);
                 // 但其实没必要，因为uint32_t可以存0 - 2^32 - 1，也就是0 - 4,294,967,295，
@@ -193,12 +193,12 @@ namespace leveldb {
 
                 uint32_t region_offset = GetRestartPoint(mid);
 
-                uint32_t shared,  non_shared, value_length;
+                uint32_t shared, non_shared, value_length;
 
                 const char *key_ptr = DecodeEntry(data_ + region_offset, data_ + restarts_,
                                                   &shared, &non_shared, &value_length);
 
-                if (key_ptr == nullptr || shared != 0){
+                if (key_ptr == nullptr || shared != 0) {
                     CorruptionError();
                     return;
                 }
@@ -207,11 +207,11 @@ namespace leveldb {
                 Slice mid_key(key_ptr, non_shared);
 
 
-                if(Compare(mid_key, target) < 0 ){
+                if (Compare(mid_key, target) < 0) {
                     // [left, mid - 1]的key都满足key < target，但是肯定不是第一个，所以舍弃
                     // 留下[mid, right]
                     left = mid;
-                } else{
+                } else {
                     // [mid, right]的key都满足key ≥ target，所以舍弃
                     // 留下[left, mid - 1]
                     right = mid - 1;
@@ -223,19 +223,19 @@ namespace leveldb {
             // key_ > target时，即使在同一组，target也在key_前面，无法ParseNextKey到
             bool skip_seek = left == restart_index_ && current_key_compare < 0;
             // 移动磁头对准找到的组的第一个Entry
-            if(!skip_seek) {
+            if (!skip_seek) {
                 SeekToRestartPoint(left);
             }
 
-            while (true){
+            while (true) {
                 // 一直顺序遍历
-                if(!ParseNextKey()){
+                if (!ParseNextKey()) {
                     return;
                 }
 
                 // 我们要找的是第一个key ≥ target的Entry
                 // 读到大于等于target的key就返回
-                if(Compare(key_, target) >= 0){
+                if (Compare(key_, target) >= 0) {
                     return;
                 }
             }
@@ -276,7 +276,7 @@ namespace leveldb {
             SeekToRestartPoint(num_restarts_ - 1);
 
             // 向右顺序遍历，找到遍历到的Entry的尾偏移量大于等于Entry区的尾偏移量
-            while (ParseNextKey() && NextEntryOffset() < restarts_){
+            while (ParseNextKey() && NextEntryOffset() < restarts_) {
 
             }
         }
@@ -289,9 +289,9 @@ namespace leveldb {
         void Prev() override {
             const uint32_t original = current_;
             // 当前组的第一个Entry的头偏移量没有小于当前Entry的头偏移量，而是大于等于，说明我们要找的Entry不在这个组
-            while (GetRestartPoint(restart_index_) >= original){
+            while (GetRestartPoint(restart_index_) >= original) {
                 // 如果移到头了，还找不到，就不能再往前移了
-                if(restart_index_ == 0){
+                if (restart_index_ == 0) {
                     // 重置磁头
                     restart_index_ = num_restarts_;
                     current_ = restarts_;
@@ -299,19 +299,20 @@ namespace leveldb {
                 }
 
                 // 向左移，寻找下一个可能的组
-                restart_index_ --;
+                restart_index_--;
             }
 
             // 移动到上一个Entry所在组的第一个Entry
             SeekToRestartPoint(restart_index_);
 
             // 向右顺序遍历，如果遍历到的Entry的尾偏移量大于等于原Entry的头偏移量，说明已经过了，肯定找不到
-            while (ParseNextKey() && NextEntryOffset() < original){
+            while (ParseNextKey() && NextEntryOffset() < original) {
 
             }
         }
 
-        private: void CorruptionError(){
+    private:
+        void CorruptionError() {
             // 重置磁头
             restart_index_ = num_restarts_; //重置组磁头
             current_ = restarts_; // 重置Entry磁头
@@ -323,52 +324,52 @@ namespace leveldb {
         }
 
         bool ParseNextKey() {
-          current_ = NextEntryOffset(); // 计算下一个Entry的开头位置
-          const char *p = data_ + current_; // 计算restart point的开头地址
-          const char *limit = data_ + restarts_; // 计算Block的末尾地址
+            current_ = NextEntryOffset(); // 计算下一个Entry的开头位置
+                const char *p = data_ + current_; // 计算restart point的开头地址
+            const char *limit = data_ + restarts_; // 计算Block的末尾地址
 
-          // 如果下一个Entry的开头位置不在Block以内，则肯定读取不到Entry
-          if (p >= limit){
-              restart_index_ = num_restarts_;
-              // 没有Entry可读了，重置为Block末尾指针的偏移量，此时Vaild()函数会指示失效
-              current_ = restarts_;
-              // 返回false通知调用者解析下一个Entry失败
-              return false;
-          }
+            // 如果下一个Entry的开头位置不在Block以内，则肯定读取不到Entry
+            if (p >= limit) {
+                restart_index_ = num_restarts_;
+                // 没有Entry可读了，重置为Block末尾指针的偏移量，此时Vaild()函数会指示失效
+                current_ = restarts_;
+                // 返回false通知调用者解析下一个Entry失败
+                return false;
+            }
 
-          uint32_t shared, non_shared, value_length;
+            uint32_t shared, non_shared, value_length;
 
-          // 从下一个Entry中解析出key的共享长度、key的非共享长度和value的长度，并将指针移动到非共享的key的位置
-          p = DecodeEntry(p, limit, &shared, &non_shared, &value_length);
+            // 从下一个Entry中解析出key的共享长度、key的非共享长度和value的长度，并将指针移动到非共享的key的位置
+            p = DecodeEntry(p, limit, &shared, &non_shared, &value_length);
 
-          // 如果key的指针为空或者上一个key还没到共享长度，那就拼接不起来完整的key
-          if(p == nullptr || key_.size() < shared){
-              // 如果读取一个Entry失败，就将status改成错误的提示
-              CorruptionError();
-              return false;
-          }else{
-              // 去掉上一个key中，非共享的部分
-              key_.resize(shared);
-              // 加上本次读取的本Entry的非共享的部分组成完整的key
-              key_.append(p, non_shared);
-              // 取出value
-              value_ = Slice(p + non_shared, value_length);
+            // 如果key的指针为空或者上一个key还没到共享长度，那就拼接不起来完整的key
+            if (p == nullptr || key_.size() < shared) {
+                // 如果读取一个Entry失败，就将status改成错误的提示
+                CorruptionError();
+                return false;
+            } else {
+                // 去掉上一个key中，非共享的部分
+                key_.resize(shared);
+                // 加上本次读取的本Entry的非共享的部分组成完整的key
+                key_.append(p, non_shared);
+                // 取出value
+                value_ = Slice(p + non_shared, value_length);
 
-              // 顺序遍历可能会遍历到下一个组中，导致restart_index和current_不匹配
-              while (restart_index_ + 1 < num_restarts_ // 不是最后一个组
-                        && GetRestartPoint(restart_index_ + 1) < current_){ // current_移动到restart_index组右侧的组去了
-                  ++restart_index_;
-              }
+                // 顺序遍历可能会遍历到下一个组中，导致restart_index和current_不匹配
+                while (restart_index_ + 1 < num_restarts_ // 不是最后一个组
+                       && GetRestartPoint(restart_index_ + 1) < current_) { // current_移动到restart_index组右侧的组去了
+                    ++restart_index_;
+                }
 
-              return true;
-          }
+                return true;
+            }
         }
     };
 
-    Iterator* Block::NewIterator(const Comparator *comparator){
+    Iterator *Block::NewIterator(const Comparator *comparator) {
         // 倘若size_ < sizeof(uint32_t)，则会导致data_ + size_ - sizeof(uint32_t) < data_
         // 调用NumRestarts()读取restart length肯定会出错
-        if(size_ < sizeof(uint32_t)){
+        if (size_ < sizeof(uint32_t)) {
             return NewErrorIterator(Status::Corruption("bad block contents"));
         }
 
@@ -376,15 +377,15 @@ namespace leveldb {
         const uint32_t num_restarts_ = NumRestarts();
 
         // 如果为0，说明Block为空
-        if(num_restarts_ == 0){
+        if (num_restarts_ == 0) {
             return NewEmptyIterator();
-        }else { // 如果不为零，则说明Block正常，生成迭代器
+        } else { // 如果不为零，则说明Block正常，生成迭代器
             return new Iter(comparator, data_, num_restarts_, restarts_offset_);
         }
     }
 
     Block::~Block() {
-        if(owned){
+        if (owned) {
             delete[] data_;
         }
     }

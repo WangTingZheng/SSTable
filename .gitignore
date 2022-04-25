@@ -53,4 +53,4 @@ build/**/*
 
 lib/*
 bin/*
-test/test_runner
+test_case/test_runner

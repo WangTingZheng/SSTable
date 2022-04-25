@@ -9,6 +9,7 @@
 
 namespace leveldb {
     struct Options;
+
     class BlockBuilder {
     public:
         explicit BlockBuilder(const Options *options);

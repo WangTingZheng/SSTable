@@ -8,22 +8,32 @@ namespace leveldb {
     // https://stackoverflow.com/questions/33427916/why-table-and-tablebuilder-in-leveldb-use-struct-rep
     struct TableBuilder::Rep {
         Rep(const Options &opt, WritableFile *f)
-                :data_block(&opt),
-                options(opt),
-                file(f),
-                offset(0){
+                : options(opt),
+                  index_block_options(opt),
+                  index_block(&index_block_options),
+                  data_block(&opt),
+                  file(f),
+                  offset(0),
+                  pending_index_entry(false)// 刚刚开始时，不向index block写入数据
+                  {
 
         }
 
-        BlockBuilder data_block;
         Options options;
+        Options index_block_options;
+
+        BlockBuilder data_block;
+        BlockBuilder index_block;
 
         BlockHandle pending_handle;
         WritableFile *file;
+        bool pending_index_entry;
         Status status;
 
         std::string compressed_output;
         uint64_t offset;
+
+        std::string last_key;
     };
 
     TableBuilder::TableBuilder(const Options &options, WritableFile *file)
@@ -33,10 +43,29 @@ namespace leveldb {
 
     void TableBuilder::Add(const Slice &key, const Slice &value) {
         Rep *r = rep_;
+
+        // 如果之前持久化了一个datablock，则准备向index block插入一条指向它的kv对
+        if (r->pending_index_entry) {
+            // 找一个介于last_key和key之间的，最短的key
+            // 比如说zzzzb + zzc = zzzd
+            r->options.comparator->FindShortestSeparator(&r->last_key, key);
+
+            // 把datablock的handle编码为字符串
+            std::string handle_encoding;
+            r->pending_handle.EncodeTo(&handle_encoding);
+
+            // 写入index block
+            r->index_block.Add(r->last_key, Slice(handle_encoding));
+            r->pending_index_entry = false;
+        }
+
+        // 更新last_key，由于不用前缀压缩，所以直接把key复制进来
+        r->last_key.assign(key.data(), key.size());
+        // 写入datablock
         r->data_block.Add(key, value);
 
+        // 估计datablock的大小
         const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
-
         //如果 Block的大小达到了阈值，则此Block以满
         if (estimated_block_size >= r->options.block_size) {
             // 合并Entry和restart point，并持久化到磁盘
@@ -52,6 +81,7 @@ namespace leveldb {
         WriteBlock(&r->data_block, &r->pending_handle);
 
         if(ok()){
+            r->pending_index_entry = true;
             // 调用文件系统的刷新接口，实际上并没有真正地持久化到磁盘，还是有可能存储在文件系统的buffer pool
             // 甚至是FTL的cache里
             r->status = r->file->Flush();
@@ -146,11 +176,64 @@ namespace leveldb {
             // 将type和crc校验码写入文件
             r->status = r->file->Append(Slice(trailer, kBlockTrailerSize));
 
-            if(r->status.ok()){
+            if (r->status.ok()) {
                 // 更新文件偏移量
                 r->offset += block_contents.size() + kBlockTrailerSize;
             }
         }
+    }
+
+    Status TableBuilder::Finish() {
+        Rep *r = rep_;
+        Flush();
+        BlockHandle index_block_handle;
+
+        if (ok()) {
+            // 还有没达到阈值的datablock，需要额外封装成一个datablock
+            if (r->pending_index_entry) {
+                // 知道一个比last_key大的短key
+                // 因为最后一个datablock已经没有下一个datablock了
+                // zzzzb -> zzzzc
+                r->options.comparator->FindShortSuccessor(&r->last_key);
+
+                // 编码成字符串
+                std::string handle_encoding;
+                r->pending_handle.EncodeTo(&handle_encoding);
+
+                //写入index block
+                r->index_block.Add(r->last_key, Slice(handle_encoding));
+                r->pending_index_entry = false;
+            }
+            // 所有datablock的handler都已经被写入到了index block了，持久化index block
+            // 获得index block的index block handle
+            WriteBlock(&r->index_block, &index_block_handle);
+        }
+
+        if (ok()) {
+            Footer footer;
+            // 将index_block_handle写入到footer
+            footer.set_index_handle(index_block_handle);
+
+            // 给footer加入padding和magic number
+            // 把它编码为字符串
+            std::string footer_encoding;
+            footer.EncodeTo(&footer_encoding);
+
+            // 写入footer数据
+            r->status = r->file->Append(Slice(footer_encoding));
+
+            // 更新偏移量
+            if (r->status.ok()) {
+                r->offset += footer_encoding.size();
+            }
+        }
+
+        return r->status;
+    }
+
+    // 把内存的数据都写入到磁盘
+    Status TableBuilder::Sync() {
+        return rep_->file->Sync();
     }
 
     Status TableBuilder::status() const {
@@ -161,5 +244,9 @@ namespace leveldb {
     // 完整的sstable中，Block的BlockHandle是写入index block的
     BlockHandle TableBuilder::ReturnBlockHandle() {
         return rep_->pending_handle;
+    }
+
+    uint64_t TableBuilder::FileSize() const {
+        return rep_->offset;
     }
 }

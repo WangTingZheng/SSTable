@@ -38,9 +38,14 @@ set(SOURCE_FILES
         format.cc
         table_builder.h
         table_builder.cc
-)
+
+        table.cc
+        table.h
+        )
 
 add_executable(src ${SOURCE_FILES})
+set(ROS_BUILD_TYPE Debug)
+
 
 include(CheckLibraryExists)
 # /usr/local/include中包含snappy.h

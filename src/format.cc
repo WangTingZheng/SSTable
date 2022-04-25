@@ -1,6 +1,70 @@
 #include "format.h"
 
 namespace leveldb {
+
+    void BlockHandle::EncodeTo(std::string *dst) const {
+        // 若0是以uint64_t的方式存储的
+        // 那么~static_cast<uint64_t>(0)就是uint64_t可以保存的最大值
+        //  0 =  0000....0000
+        // ~0 = ~0000....0000 = 1111....1111
+        // 为什么要这么检查呢？
+        assert(offset_ != ~static_cast<uint64_t>(0));
+        assert(size_ != ~static_cast<uint64_t>(0));
+        PutVarint64(dst, offset_);
+        PutVarint64(dst, size_);
+    }
+
+    Status BlockHandle::DecodeFrom(Slice *input) {
+        if (GetVarint64(input, &offset_) && GetVarint64(input, &size_)) {
+            return Status::OK();
+        } else {
+            return Status::Corruption("bad block handle");
+        }
+    }
+
+    // index_handle + padding
+    // magic number
+    void Footer::EncodeTo(std::string *dst) const {
+        const size_t original_size = dst->size();
+
+        index_handle_.EncodeTo(dst); // add index_handle to dst
+        dst->resize(BlockHandle::kMaxEncodedLength); // padding
+
+        // @todo 为什么不直接调用PutFixed64接口进行持久化？
+        PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber & 0xffffffffu));
+        PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber >> 32));
+        //PutFixed64(dst, kTableMagicNumber);
+
+        assert(original_size + kEncodedLength == dst->size());
+        (void) original_size;
+    }
+
+    //index_handle + padding
+    //magic number
+    Status Footer::DecodeFrom(Slice *input) {
+        const char *magic_ptr = input->data() + kEncodedLength - 8;
+
+        const uint32_t magic_lo = DecodeFixed32(magic_ptr);
+        const uint32_t magic_hi = DecodeFixed32(magic_ptr + 4);
+        const uint64_t magic = ((static_cast<uint64_t>(magic_hi) << 32) |
+                                (static_cast<uint64_t>(magic_lo)));
+        //const uint64_t magic = DecodeFixed64(magic_ptr);
+
+        if (magic != kTableMagicNumber) {
+            return Status::Corruption("not an sstable (bad magic number)");
+        }
+
+        Status status = index_handle_.DecodeFrom(input);
+
+        // @todo 为什么还要对input进行这样的处理呢？
+        if (status.ok()) {
+            const char *end = magic_ptr + 8;
+            *input = Slice(end, input->data() + input->size() - end);
+        }
+
+        return status;
+    }
+
     Status ReadBlock(RandomAccessFile *file, const ReadOptions &options,
                      const BlockHandle &handle, BlockContents *result) {
         result->data = Slice();
@@ -74,7 +138,7 @@ namespace leveldb {
                     return Status::Corruption("corrupted compressed block contents");
                 }
                 char *ubuf = new char[ulength];
-                if(!port::Snappy_Uncompress(data, n, buf)){
+                if (!port::Snappy_Uncompress(data, n, ubuf)) {
                     delete[] buf;
                     delete[] ubuf;
                     return Status::Corruption("corrupted compressed block contents");

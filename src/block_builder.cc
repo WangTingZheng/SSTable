@@ -7,15 +7,15 @@ namespace leveldb {
 
         assert(!finished_);
 
-        assert(counter_ < options_->block_restart_interval);
+        assert(counter_ <= options_->block_restart_interval);
         assert(buffer_.empty() ||
-                       options_->comparator->Compare(key, last_key_piece) > 0);
+               options_->comparator->Compare(key, last_key_piece) > 0);
 
         //初始化共享长度，第一个Entry为0，因为保存的是完整的key
         size_t shared = 0;
 
         // 如果不是第一个Entry，就需要特别计算共享长度
-        if (counter_ < options_->block_restart_interval){
+        if (counter_ < options_->block_restart_interval) {
             // 从左向右遍历的长度，取两个key的最小值即可，因为我们要比较同一位置的字符，比较的前提是两个key都要有这个字符
             const size_t min_length = std::min(last_key_piece.size(), key.size());
 
